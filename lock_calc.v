@@ -31,16 +31,20 @@ localparam fm8_in_coef  = 2;	//для столбцов, прилегающих �
 
 localparam out_coef     = 1;	//для точек против
 
-
+reg data_val_shift;
 reg[DATA_WIDTH-1:0] arr_in[0:BOUND_NUM-1];
 genvar i;
 generate
     for(i = 0; i < BOUND_NUM; i = i + 1) begin
         always@(posedge clk) begin
             if( !reset_n ) begin
-                arr_in[i] <= 0;
+                arr_in[i]      <= 0;
+                data_val_shift <= 0;
             end else if( data_val_i ) begin
                 arr_in[i] <= data_i[(i*DATA_WIDTH + DATA_WIDTH)-1 : i*DATA_WIDTH];
+                data_val_shift <= data_val_i;
+            end else begin
+                data_val_shift <= data_val_i;
             end
         end
     end
@@ -59,7 +63,7 @@ wire[DATA_WIDTH+4:0] sum_4;
 reg [DATA_WIDTH+4:0] sum_4_reg;
 
 reg lock_sum_0, lock_sum_1, lock_sum_2, lock_sum_3, lock_sum_4;
-reg end_sum_0, end_sum_1, end_sum_2, end_sum_3, end_sum_4, end_calc;
+reg lock_sum_0_shift, lock_sum_1_shift, lock_sum_2_shift, lock_sum_3_shift, lock_sum_4_shift;
 
 // Step 1
 generate
@@ -74,20 +78,23 @@ generate
         if( i == 0 ) begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_0_reg[i] <= 0;
-                    end_sum_0    <= 0;
-                end else if(lock_sum_0) begin
+                    sum_0_reg[i]     <= 0;
+                    lock_sum_0       <= 0;
+                    lock_sum_0_shift <= 0;
+                end else if(data_val_shift) begin
                     sum_0_reg[i] <= sum_0[i];
-                    end_sum_0    <= 1;
+                    lock_sum_0   <= 1;
+                    lock_sum_0_shift <= lock_sum_0;
                 end else begin
-                    end_sum_0 <= 0;
+                    lock_sum_0       <= 0;
+                    lock_sum_0_shift <= lock_sum_0;
                 end
             end
         end else begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
                     sum_0_reg[i] <= 0;                   
-                end else if(lock_sum_0) begin
+                end else if(data_val_shift) begin
                     sum_0_reg[i] <= sum_0[i];
                 end
             end
@@ -109,20 +116,23 @@ generate
         if( i == 0 ) begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_1_reg[i] <= 0;
-                    end_sum_1    <= 0;
-                end else if(lock_sum_1) begin
-                    sum_1_reg[i] <= sum_1[i];
-                    end_sum_1    <= 1;
+                    sum_1_reg[i]     <= 0;
+                    lock_sum_1       <= 0;
+                    lock_sum_1_shift <= 0;
+                end else if(lock_sum_0_shift) begin
+                    sum_1_reg[i]     <= sum_1[i];
+                    lock_sum_1       <= 1;
+                    lock_sum_1_shift <= lock_sum_1;
                 end else begin
-                    end_sum_1 <= 0;
+                    lock_sum_1       <= 0;
+                    lock_sum_1_shift <= lock_sum_1;
                 end
             end
         end else begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
                     sum_1_reg[i] <= 0;
-                end else if(lock_sum_1) begin
+                end else if(lock_sum_0_shift) begin
                     sum_1_reg[i] <= sum_1[i];
                 end
             end
@@ -144,20 +154,23 @@ generate
         if( i == 0 ) begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_2_reg[i] <= 0;
-                    end_sum_2    <= 0;
-                end else if(lock_sum_2) begin
-                    sum_2_reg[i] <= sum_2[i];
-                    end_sum_2    <= 1;
+                    sum_2_reg[i]     <= 0;
+                    lock_sum_2       <= 0;
+                    lock_sum_2_shift <= 0;
+                end else if(lock_sum_1_shift) begin
+                    sum_2_reg[i]     <= sum_2[i];
+                    lock_sum_2       <= 1;
+                    lock_sum_2_shift <= lock_sum_2;
                 end else begin
-                    end_sum_2 <= 0;
+                    lock_sum_2       <= 0;
+                    lock_sum_2_shift <= lock_sum_2;
                 end
             end
         end else begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
                     sum_2_reg[i] <= 0;
-                end else if(lock_sum_2) begin
+                end else if(lock_sum_1_shift) begin
                     sum_2_reg[i] <= sum_2[i];
                 end
             end
@@ -180,19 +193,22 @@ generate
             always@(posedge clk) begin
                 if( !reset_n ) begin
                     sum_3_reg[i] <= 0;
-                    end_sum_3    <= 0;
-                end else if(lock_sum_3) begin
-                    sum_3_reg[i] <= sum_3[i];
-                    end_sum_3    <= 1;
+                    lock_sum_3   <= 0;
+                    lock_sum_3_shift <= lock_sum_3;
+                end else if(lock_sum_2_shift) begin
+                    sum_3_reg[i]     <= sum_3[i];
+                    lock_sum_3       <= 1;
+                    lock_sum_3_shift <= lock_sum_3;
                 end else begin
-                    end_sum_3 <= 0;
+                    lock_sum_3       <= 0;
+                    lock_sum_3_shift <= lock_sum_3;
                 end
             end
         end else begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
                     sum_3_reg[i] <= 0;
-                end else if(lock_sum_3) begin
+                end else if(lock_sum_2_shift) begin
                     sum_3_reg[i] <= sum_3[i];
                 end
             end
@@ -206,13 +222,16 @@ assign sum_4 = sum_3_reg[0] + sum_3_reg[1];
 // Защелка пятой суммы 
 always@(posedge clk) begin
     if( !reset_n ) begin
-        sum_4_reg <= 0;
-        end_sum_4 <= 0;
-    end else if( lock_sum_4) begin
-        sum_4_reg <= sum_4;
-        end_sum_4 <= 1;
+        sum_4_reg        <= 0;
+        lock_sum_4       <= 0;
+        lock_sum_4_shift <= 0;
+    end else if( lock_sum_3_shift) begin
+        sum_4_reg        <= sum_4;
+        lock_sum_4       <= 1;
+        lock_sum_4_shift <= lock_sum_4;
     end else begin
-        end_sum_4 <= 0;
+        lock_sum_4       <= 0;
+        lock_sum_4_shift <= lock_sum_4;
     end
 end
 
@@ -223,7 +242,7 @@ always@(posedge clk) begin
     if( !reset_n ) begin
         max_value   <= 0;
         closely_sum <= 0;
-    end else if( lock_sum_1 ) begin
+    end else if( lock_sum_0_shift ) begin
         if( max_num_i == 0 ) begin
             max_value   <= arr_in[0];
             closely_sum <= arr_in[1];
@@ -245,7 +264,7 @@ always@(posedge clk) begin
         max_mult     <= 0;
         closely_mult <= 0;
         sum_in       <= 0;
-    end else if( lock_sum_3 ) begin
+    end else if( lock_sum_2_shift ) begin
         if( mode_i == fm4_mode ) begin
             max_mult     <= max_value   * fm4_max_coef;
             closely_mult <= closely_sum * fm4_in_coef;
@@ -258,126 +277,36 @@ always@(posedge clk) begin
 end
 
 reg[DATA_WIDTH+4:0] point_out, point_in;
-reg start_last_calc;
 always@(posedge clk) begin
     if( !reset_n ) begin
-        point_in  <= 0;
-        point_out <= 0;
-        end_calc  <= 0;
-    end else if( start_last_calc ) begin
-        point_in  <= max_mult + closely_mult;
-        point_out <= sum_4_reg - sum_in ;
-        end_calc  <= 1;
+        point_in          <= 0;
+        point_out         <= 0;
+        start_check       <= 0;
+        start_check_shift <= 0;
+    end else if(lock_sum_4_shift) begin
+        point_in          <= max_mult + closely_mult;
+        point_out         <= sum_4_reg - sum_in ;
+        start_check       <= 1;
+        start_check_shift <= start_check;
     end else begin
-        end_calc  <= 0;
+        start_check       <= 0;
+        start_check_shift <= start_check;
     end
 end
     
 reg lock_flag, out_val;
-reg start_check;    
+reg start_check, start_check_shift;    
 always@(posedge clk) begin
     if( !reset_n ) begin
         lock_flag <= 0;
         out_val   <= 0;
-    end else if ( start_check ) begin
+    end else if (start_check_shift) begin
         if( point_in >= point_out ) lock_flag <= 1;
         else                        lock_flag <= 0;
         out_val <= 1;
     end else begin
         out_val <= 0;
     end
-end
-
-//------------------------------//
-//---------   FSM    -----------//
-//------------------------------//
-reg[2:0] state, nextstate;
-localparam IDLE_ST      = 0;
-localparam SUM_0_ST     = 1;
-localparam SUM_1_ST     = 2;
-localparam SUM_2_ST     = 3;
-localparam SUM_3_ST     = 4;
-localparam SUM_4_ST     = 5;
-localparam LAST_CALC_ST = 6;
-localparam CHECK_ST     = 7;
-
-always@(posedge clk) begin
-    if( !reset_n ) state <= IDLE_ST;
-    else           state <= nextstate;
-end
-
-
-always@(*) begin
-    nextstate       = 'hX;
-    lock_sum_0      = 0;
-    lock_sum_1      = 0;
-    lock_sum_2      = 0;
-    lock_sum_3      = 0;
-    lock_sum_4      = 0;
-    start_last_calc = 0;
-    start_check     = 0;
-    
-    case( state )
-        IDLE_ST: begin
-            nextstate = IDLE_ST;
-            if( data_val_i ) begin
-                nextstate   = SUM_0_ST;
-            end
-        end
-        
-        SUM_0_ST: begin
-            lock_sum_0 = 1;
-            nextstate  = SUM_1_ST;
-        end
-        
-        SUM_1_ST: begin
-            nextstate = SUM_1_ST;
-            if( end_sum_0 ) begin
-                lock_sum_1 = 1;
-                nextstate  = SUM_2_ST;
-            end
-        end
-        
-        SUM_2_ST: begin
-            nextstate = SUM_2_ST;
-            if( end_sum_1 ) begin
-                lock_sum_2 = 1;
-                nextstate  = SUM_3_ST;
-            end
-        end
-        
-        SUM_3_ST: begin
-            nextstate = SUM_3_ST;
-            if( end_sum_2 ) begin
-                lock_sum_3 = 1;
-                nextstate  = SUM_4_ST;
-            end
-        end
-        
-        SUM_4_ST: begin
-            nextstate = SUM_4_ST;
-            if( end_sum_3 ) begin
-                lock_sum_4 = 1;
-                nextstate  = LAST_CALC_ST;
-            end
-        end
-        
-        LAST_CALC_ST: begin
-            nextstate = LAST_CALC_ST;
-            if( end_sum_4 ) begin
-                start_last_calc = 1;
-                nextstate       = CHECK_ST;
-            end
-        end
-        
-        CHECK_ST: begin
-            nextstate = CHECK_ST;
-            if( end_calc ) begin
-                start_check = 1;
-                nextstate   = IDLE_ST;
-            end
-        end 
-    endcase
 end
 
 assign val_o  = out_val;
