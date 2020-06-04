@@ -1,9 +1,9 @@
 //FIX: я пока не смог придумать как сделать этот модуль параметризируемым, возможно не правильно понял суть, как ты предлагал сделать сумму по шагам.
 //     тоесть на данный момент получается вся система параметров нормально не работает, пока не придумал как задавать определенное количство "шагов" сложения
-//     также, наверное, тут можно обойтись без стейт машины
+
 module lock_calc #(
     parameter DATA_WIDTH      = 16,
-    parameter BOUND_WIDTH     = 10,    // ширина границам
+    parameter BOUND_WIDTH     = 10,    // ширина границ
     parameter BOUND_NUM       = 32,    // количесвто границ
     parameter BOUND_NUM_WIDTH = 5      // количество бит в которые можно записать число BOUND_NUM
     
@@ -22,14 +22,14 @@ module lock_calc #(
 
 localparam fm4_mode = 3'b001;
 localparam fm8_mode = 3'b010;
-//Коэффициенты для подстройки результатов fm4
-localparam fm4_max_coef = 4;	//для максимума
-localparam fm4_in_coef  = 3;	//для столбцов, прилегающих к максимуму
-//Коэффициенты для подстройки результатов fm8
-localparam fm8_max_coef = 2;	//для максимума
-localparam fm8_in_coef  = 2;	//для столбцов, прилегающих к максимуму
+// Коэффициенты для подстройки результатов fm4
+localparam fm4_max_coef = 4;	// для максимума
+localparam fm4_in_coef  = 3;	// для столбцов, прилегающих к максимуму
+// Коэффициенты для подстройки результатов fm8
+localparam fm8_max_coef = 2;	// для максимума
+localparam fm8_in_coef  = 2;	// для столбцов, прилегающих к максимуму
 
-localparam out_coef     = 1;	//для точек против
+localparam out_coef     = 1;	// для точек против
 
 reg data_val_shift;
 reg[DATA_WIDTH-1:0] arr_in[0:BOUND_NUM-1];
@@ -62,6 +62,7 @@ reg [DATA_WIDTH+3:0] sum_3_reg[0:BOUND_NUM/16-1];
 wire[DATA_WIDTH+4:0] sum_4;
 reg [DATA_WIDTH+4:0] sum_4_reg;
 
+// Сдвиговые регистры нужны для того чтобы на 1 такт задержать сигнала защелки сложения в регистр, это позволяет избавится от FSM.
 reg lock_sum_0, lock_sum_1, lock_sum_2, lock_sum_3, lock_sum_4;
 reg lock_sum_0_shift, lock_sum_1_shift, lock_sum_2_shift, lock_sum_3_shift, lock_sum_4_shift;
 
@@ -257,8 +258,10 @@ always@(posedge clk) begin
 end
 
 // Домножение на корректирующие коэффициенты
-reg[DATA_WIDTH+2:0] max_mult, closely_mult;
+reg[DATA_WIDTH+1:0] max_mult; 
 reg[DATA_WIDTH+1:0] sum_in;
+reg[DATA_WIDTH+2:0] closely_mult;
+
 always@(posedge clk) begin
     if( !reset_n ) begin
         max_mult     <= 0;
