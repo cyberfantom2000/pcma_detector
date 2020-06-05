@@ -3,7 +3,7 @@ module pcma_detector #(
     parameter DATA_WIDTH_CORD = 16,  
     parameter PERIOD_WIDTH 	  = 16,  // длина регистра периодов Seek и Lock
     parameter BOUND_WIDTH     = 10,  // ширина границ
-    parameter BOUND_NUM       = 32,  // количесвто границ, должно быть кратно степени 2. FIX: пока работает только до 32, один модуль не параметризировать
+    parameter BOUND_NUM       = 32,  // количесвто границ, должно быть кратно степени 2. FIX: пока работает только для 32, один модуль не параметризировать
     parameter BOUND_NUM_WIDTH = 5    // количесвто бит в которое влезет число BOUND_NUM
 )(							  
     input                     clk, 

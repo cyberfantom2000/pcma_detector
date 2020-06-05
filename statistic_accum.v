@@ -2,7 +2,7 @@
 module statistic_accum #(
     parameter DATA_WIDTH      = 16,
     parameter BOUND_WIDTH     = 10,    // ширина границам
-    parameter BOUND_NUM       = 32,    // количесвто границ
+    parameter BOUND_NUM       = 32,    // количесвто границ только 32!!!
     parameter BOUND_NUM_WIDTH = 5      // количество бит в которые можно записать число BOUND_NUM
 )(
     input                            clk,

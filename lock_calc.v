@@ -4,7 +4,7 @@
 module lock_calc #(
     parameter DATA_WIDTH      = 16,
     parameter BOUND_WIDTH     = 10,    // ширина границ
-    parameter BOUND_NUM       = 32,    // количесвто границ
+    parameter BOUND_NUM       = 32,    // количесвто границ должно быть равно 32!!
     parameter BOUND_NUM_WIDTH = 5      // количество бит в которые можно записать число BOUND_NUM
     
 )(
@@ -51,40 +51,30 @@ generate
 endgenerate
 
 
-wire[DATA_WIDTH:0]   sum_0    [0:BOUND_NUM/2-1];
-reg [DATA_WIDTH:0]   sum_0_reg[0:BOUND_NUM/2-1];
-wire[DATA_WIDTH+1:0] sum_1    [0:BOUND_NUM/4-1];
-reg [DATA_WIDTH+1:0] sum_1_reg[0:BOUND_NUM/4-1];
-wire[DATA_WIDTH+2:0] sum_2    [0:BOUND_NUM/8-1];
-reg [DATA_WIDTH+2:0] sum_2_reg[0:BOUND_NUM/8-1];
-wire[DATA_WIDTH+3:0] sum_3    [0:BOUND_NUM/16-1];
-reg [DATA_WIDTH+3:0] sum_3_reg[0:BOUND_NUM/16-1];
-wire[DATA_WIDTH+4:0] sum_4;
-reg [DATA_WIDTH+4:0] sum_4_reg;
+
+reg [DATA_WIDTH:0]   sum_0[0:BOUND_NUM/2-1];
+reg [DATA_WIDTH+1:0] sum_1[0:BOUND_NUM/4-1];
+reg [DATA_WIDTH+2:0] sum_2[0:BOUND_NUM/8-1];
+reg [DATA_WIDTH+3:0] sum_3[0:BOUND_NUM/16-1];
+reg [DATA_WIDTH+4:0] sum_4;
 
 // Сдвиговые регистры нужны для того чтобы на 1 такт задержать сигнала защелки сложения в регистр, это позволяет избавится от FSM.
 reg lock_sum_0, lock_sum_1, lock_sum_2, lock_sum_3, lock_sum_4;
 reg lock_sum_0_shift, lock_sum_1_shift, lock_sum_2_shift, lock_sum_3_shift, lock_sum_4_shift;
 
-// Step 1
-generate
-    for(i = 0; i < BOUND_NUM/2; i = i + 1) begin                    
-        assign sum_0[i] = arr_in[2*i] + arr_in[2*i+1];
-    end
-endgenerate
 
-// Защелка первой суммы 
+// Первая линия сумматоров
 generate
     for(i = 0; i < BOUND_NUM/2; i = i + 1) begin
         if( i == 0 ) begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_0_reg[i]     <= 0;
+                    sum_0[i]         <= 0;
                     lock_sum_0       <= 0;
                     lock_sum_0_shift <= 0;
                 end else if(data_val_shift) begin
-                    sum_0_reg[i] <= sum_0[i];
-                    lock_sum_0   <= 1;
+                    sum_0[i]         <= arr_in[2*i] + arr_in[2*i+1];
+                    lock_sum_0       <= 1;
                     lock_sum_0_shift <= lock_sum_0;
                 end else begin
                     lock_sum_0       <= 0;
@@ -94,9 +84,9 @@ generate
         end else begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_0_reg[i] <= 0;                   
+                    sum_0[i] <= 0;                   
                 end else if(data_val_shift) begin
-                    sum_0_reg[i] <= sum_0[i];
+                    sum_0[i] <= arr_in[2*i] + arr_in[2*i+1];
                 end
             end
         end
@@ -104,24 +94,17 @@ generate
 endgenerate
 
 
-// Step 2
-generate
-    for(i = 0; i < BOUND_NUM/4; i = i + 1) begin        
-        assign sum_1[i] = sum_0_reg[2*i] + sum_0_reg[2*i+1];        
-    end
-endgenerate
-
-// Защелка второй суммы 
+// Вторая линия сумматоров
 generate
     for(i = 0; i < BOUND_NUM/4; i = i + 1) begin
         if( i == 0 ) begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_1_reg[i]     <= 0;
+                    sum_1[i]         <= 0;
                     lock_sum_1       <= 0;
                     lock_sum_1_shift <= 0;
                 end else if(lock_sum_0_shift) begin
-                    sum_1_reg[i]     <= sum_1[i];
+                    sum_1[i]         <= sum_0[2*i] + sum_0[2*i+1];
                     lock_sum_1       <= 1;
                     lock_sum_1_shift <= lock_sum_1;
                 end else begin
@@ -132,9 +115,9 @@ generate
         end else begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_1_reg[i] <= 0;
+                    sum_1[i] <= 0;
                 end else if(lock_sum_0_shift) begin
-                    sum_1_reg[i] <= sum_1[i];
+                    sum_1[i] <= sum_0[2*i] + sum_0[2*i+1];
                 end
             end
         end
@@ -142,24 +125,17 @@ generate
 endgenerate
 
 
-// Step 3
-generate
-    for(i = 0; i < BOUND_NUM/8; i = i + 1) begin        
-        assign sum_2[i] = sum_1_reg[2*i] + sum_1_reg[2*i+1];        
-    end
-endgenerate
-
-// Защелка третьей суммы 
+// Третья линия сумматоров
 generate
     for(i = 0; i < BOUND_NUM/8; i = i + 1) begin
         if( i == 0 ) begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_2_reg[i]     <= 0;
+                    sum_2[i]         <= 0;
                     lock_sum_2       <= 0;
                     lock_sum_2_shift <= 0;
                 end else if(lock_sum_1_shift) begin
-                    sum_2_reg[i]     <= sum_2[i];
+                    sum_2[i]         <= sum_1[2*i] + sum_1[2*i+1];
                     lock_sum_2       <= 1;
                     lock_sum_2_shift <= lock_sum_2;
                 end else begin
@@ -170,9 +146,9 @@ generate
         end else begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_2_reg[i] <= 0;
+                    sum_2[i] <= 0;
                 end else if(lock_sum_1_shift) begin
-                    sum_2_reg[i] <= sum_2[i];
+                    sum_2[i] <= sum_1[2*i] + sum_1[2*i+1];
                 end
             end
         end 
@@ -180,24 +156,17 @@ generate
 endgenerate
 
 
-// Step 4
-generate
-    for(i = 0; i < BOUND_NUM/16; i = i + 1) begin       
-        assign sum_3[i] = sum_2_reg[2*i] + sum_2_reg[2*i+1];        
-    end
-endgenerate
-
-// Защелка четвертой суммы 
+// Четвертая линия сумматоров
 generate
     for(i = 0; i < BOUND_NUM/16; i = i + 1) begin
         if ( i == 0 ) begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_3_reg[i] <= 0;
-                    lock_sum_3   <= 0;
+                    sum_3[i]         <= 0;
+                    lock_sum_3       <= 0;
                     lock_sum_3_shift <= lock_sum_3;
                 end else if(lock_sum_2_shift) begin
-                    sum_3_reg[i]     <= sum_3[i];
+                    sum_3[i]         <= sum_2[2*i] + sum_2[2*i+1];
                     lock_sum_3       <= 1;
                     lock_sum_3_shift <= lock_sum_3;
                 end else begin
@@ -208,26 +177,24 @@ generate
         end else begin
             always@(posedge clk) begin
                 if( !reset_n ) begin
-                    sum_3_reg[i] <= 0;
+                    sum_3[i] <= 0;
                 end else if(lock_sum_2_shift) begin
-                    sum_3_reg[i] <= sum_3[i];
+                    sum_3[i] <= sum_2[2*i] + sum_2[2*i+1];
                 end
             end
         end
     end 
 endgenerate
 
-// Step 5
-assign sum_4 = sum_3_reg[0] + sum_3_reg[1];
 
-// Защелка пятой суммы 
+// Одинокйи сумматоро
 always@(posedge clk) begin
     if( !reset_n ) begin
-        sum_4_reg        <= 0;
+        sum_4            <= 0;
         lock_sum_4       <= 0;
         lock_sum_4_shift <= 0;
     end else if( lock_sum_3_shift) begin
-        sum_4_reg        <= sum_4;
+        sum_4            <= sum_3[0] + sum_3[1];;
         lock_sum_4       <= 1;
         lock_sum_4_shift <= lock_sum_4;
     end else begin
@@ -257,6 +224,8 @@ always@(posedge clk) begin
     end
 end
 
+
+
 // Домножение на корректирующие коэффициенты
 reg[DATA_WIDTH+1:0] max_mult; 
 reg[DATA_WIDTH+1:0] sum_in;
@@ -279,6 +248,8 @@ always@(posedge clk) begin
     end
 end
 
+
+// Вычисление точек ЗА и ПРОТИВ
 reg[DATA_WIDTH+4:0] point_out, point_in;
 always@(posedge clk) begin
     if( !reset_n ) begin
@@ -288,7 +259,7 @@ always@(posedge clk) begin
         start_check_shift <= 0;
     end else if(lock_sum_4_shift) begin
         point_in          <= max_mult + closely_mult;
-        point_out         <= sum_4_reg - sum_in ;
+        point_out         <= sum_4 - sum_in ;
         start_check       <= 1;
         start_check_shift <= start_check;
     end else begin
@@ -296,7 +267,9 @@ always@(posedge clk) begin
         start_check_shift <= start_check;
     end
 end
-    
+
+
+// Проверка захвата
 reg lock_flag, out_val;
 reg start_check, start_check_shift;    
 always@(posedge clk) begin

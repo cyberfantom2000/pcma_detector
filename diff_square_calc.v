@@ -11,8 +11,8 @@ module diff_square_calc #(
     input[DATA_WIDTH-1:0]   Q_data_i,
     
     output                  valid_o,
-    output[15:0]            sqrt_R_o     // Размерность зависит от конфигурации cordic      
-);
+    output[15:0]            sqrt_R_o     // Размерность зависит от конфигурации cordic. В общем размерность может быть равна [DATA_WIDTH+1:0]    
+);                                       // но cordic умеет формировать выходную шину только размерностей 8, 16, 24, 32 и т.д. следовательно он формирует шину [15:0] и ругается, что биты не использу
 
 localparam fm4_mode = 3'b001;
 localparam fm8_mode = 3'b010;
@@ -25,7 +25,7 @@ localparam idealQ_8psk = 98;
 
 // Cordic signals
 reg cordic_in_data_val;
-reg [23:0] square_R;	 // Размерность зависит от конфигурации cordic
+reg [23:0] square_R;	 // Размерность зависит от конфигурации cordic. Тоже самое что и с портом sqrt_R_o
 // cordic sqrt ip-core
 cordic_0 sqrt(
 	.aclk					 (clk),					// in
