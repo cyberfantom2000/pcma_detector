@@ -5,21 +5,41 @@ module statistic_accum #(
     parameter BOUND_NUM       = 32,    // количесвто границ только 32!!!
     parameter BOUND_NUM_WIDTH = 5      // количество бит в которые можно записать число BOUND_NUM
 )(
-    input                            clk,
-    input                            reset_n,
+    input                            clk             ,
+    input                            reset_n         ,
     
-    input                            data_val_i,       // сигнал валидности от кордика
+    input                            data_val_i      , // сигнал валидности от кордика
     input                            start_search_max, // должен быть выставлен до тех пор, пока не появится data_val_o
-    input                            clear_i,          // обнуление массива при новом цикле накопления точек
-    input[DATA_WIDTH-1:0]            data_i,
+    input                            clear_i         , // обнуление массива при новом цикле накопления точек
+    input[DATA_WIDTH-1:0]            data_i          , 
     
-    output                           data_val_o,
-    output[BOUND_NUM_WIDTH-1:0]      max_num_o,
+    output                           data_val_o      ,
+    output[BOUND_NUM_WIDTH-1:0]      max_num_o       ,
     output[DATA_WIDTH*BOUND_NUM-1:0] arr_o
 );
 
+//************ Declaration ************//
+reg[DATA_WIDTH-1     :0] data_r;
+reg                      val_r;
 
-reg[DATA_WIDTH-1:0] hit_arr[0:BOUND_NUM-1];
+reg[DATA_WIDTH-1     :0] hit_arr [0:BOUND_NUM-1];
+reg[DATA_WIDTH-1     :0] max_value              ;
+reg[BOUND_NUM_WIDTH-1:0] max_num                ;
+reg[BOUND_NUM_WIDTH  :0] cnt_max = 0            ;
+reg                      data_val               ;
+
+
+// Pipeling
+always@(posedge clk) begin
+    if(!reset_n) begin
+        data_r <= 0;
+        val_r  <= 0;
+    end else begin
+        data_r <= data_i;
+        val_r  <= data_val_i;
+    end
+end
+
 // Распределение точек по границам.
 genvar i;
 generate            
@@ -27,8 +47,8 @@ generate
         always@(posedge clk) begin
             if( !reset_n || clear_i ) begin
                 hit_arr[i] <= 0;
-            end else if( data_val_i ) begin 
-                if( (data_i >= i*BOUND_WIDTH) && (data_i < i*BOUND_WIDTH + BOUND_WIDTH) ) begin
+            end else if( val_r ) begin 
+                if( (data_r >= i*BOUND_WIDTH) && (data_r < i*BOUND_WIDTH + BOUND_WIDTH) ) begin
                     hit_arr[i] <= hit_arr[i] + 1;
                 end
             end
@@ -44,9 +64,6 @@ generate
     end    
 endgenerate 
 
-reg data_val;
-reg[DATA_WIDTH-1:0]      max_value;
-reg[BOUND_NUM_WIDTH:0] max_num, cnt_max = 0;
 // Поиск максимума.
 always@(posedge clk) begin
     if (!reset_n || clear_i ) begin

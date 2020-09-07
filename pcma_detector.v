@@ -1,97 +1,120 @@
+// FIX: подумать, что делать, если mode_i изменяется во время работы. Не стоит менять режим без reset_n сигнала.
 module pcma_detector #(
     parameter DATA_WIDTH_IQ   = 10,  // длина регистров I и Q
-    parameter DATA_WIDTH_CORD = 16,  
+    parameter DATA_WIDTH_CORD = 16,  // длина выходных данных кордика, генерится вивадой из ряда 8, 16, 24, 32... 
     parameter PERIOD_WIDTH 	  = 16,  // длина регистра периодов Seek и Lock
-    parameter BOUND_WIDTH     = 10,  // ширина границ
-    parameter BOUND_NUM       = 32,  // количесвто границ, должно быть кратно степени 2. FIX: пока работает только для 32, один модуль не параметризировать
-    parameter BOUND_NUM_WIDTH = 5    // количесвто бит в которое влезет число BOUND_NUM
+    parameter BOUND_WIDTH     = 10,  // ширина границ (растояние между соседними границами)
+    //parameter BOUND_NUM       = 32,  
+    parameter BOUND_NUM_WIDTH = 5    // количесвто бит в которое влезет число BOUND_NUM (степень двойки)
 )(							  
-    input                     clk, 
-    input                     reset_n,
+    input                     clk          , 
+    input                     reset_n      ,
 
-    input [2:0]               mode_i,        // 001 - fm4, 010 - fm8 
-    input [DATA_WIDTH_IQ-1:0] I_data_i,      // input I; значения приходят в допкоде
-    input [DATA_WIDTH_IQ-1:0] Q_data_i,      // input Q; значения приходят в допкоде
-    input                     data_val_i, 
-    input [PERIOD_WIDTH-1:0]  period_seek_i, // значение периода для поиска захвата
-    input [PERIOD_WIDTH-1:0]  period_lock_i, // значение периода удержания захвата Lock > Seek
-     
+    input [2              :0] mode_i       , // 001 - fm4, 010 - fm8, остальные комбинации резерв. !!! ВАЖНО !!! Сейчас сделано так 001 это fm4, иначе fm8
+    input [DATA_WIDTH_IQ-1:0] I_data_i     , // input I; значения приходят в допкоде
+    input [DATA_WIDTH_IQ-1:0] Q_data_i     , // input Q; значения приходят в допкоде
+    input                     data_val_i   , 
+    input [PERIOD_WIDTH-1 :0] period_seek_i, // количесвто точек, которые должны накопится
+    input [PERIOD_WIDTH-1 :0] period_lock_i, // количесвто точек, которые должны накопится. Lock > Seek. Если есть захват то используется значение period_lock_i иначе period_seek_i.
+    
+    input [3              :0] max_coef_i   , // Коэффициенты подстройки для максимума !!! их надо выставить на все время, а не на 1 такт!!!
+    input [3              :0] in_coef_i    , // Коэффициенты подстройки для столбцов, прилегающих к максимуму
+    input [3              :0] out_coef_i   , // Коэффициенты подстройки для точек против
+    
     output                    lock_o
 );
 
-wire suare_calc_val; // Сигнал валидность от модуля вычисления квадрата (выставляет его кордик)
-wire[15:0] sqrt_R;   // Размер шины зависит от конфигурации кордика, потом через дерективы можно параметризировать
-reg        sqare_en; // Пока идет накопление статистики sqare_en==1, после окончания периода ==0
+wire                                suare_calc_val    ; // Сигнал валидность от модуля вычисления квадрата (выставляет его кордик)
+wire[15                         :0] sqrt_R            ; // Размер шины зависит от конфигурации кордика, (через дерективы возможно имеет смысл параметризировать либо сделать параметром)
+reg                                 sqare_en          ; // Пока идет накопление статистики sqare_en==1, после окончания периода ==0
 
-wire                           stat_accum_val;  // выход валид модуля statistic_accum
-wire[BOUND_NUM_WIDTH-1:0]      max_num;         // Номер границы, содержащей максимум
-wire[DATA_WIDTH_CORD*BOUND_NUM-1:0] accum_arr;  // Регистр в который записаны все границы накопленного массива
-                                                // 0-11 бит 0 ячейка массива, 12-23 бит 1 ячейка массива и т.д.
+wire                                stat_accum_val    ; // выход валид модуля statistic_accum
+wire[BOUND_NUM_WIDTH-1          :0] max_num           ; // Номер границы, содержащей максимум
+wire[DATA_WIDTH_CORD*BOUND_NUM-1:0] accum_arr         ; // Шина в который записаны все границы накопленного массива для передачи между модулями
+                                                        // 0-11 бит 0 ячейка массива, 12-23 бит 1 ячейка массива и т.д.
+reg                                 srart_calc        ; // старт вычислений точек ЗА и ПРОТИВ
+wire                                lock_val          ; // валидность флага захвата, для перехода FSM в новый цикл накопления.
+reg                                 start_search_max  ; // начало поиска максимума, выставляется в конце периода накопления cntr==0
+reg                                 clear             ; // очистка массива статистики перед новым циклом
+reg [DATA_WIDTH_IQ-1            :0] I_data_r, Q_data_r;
+reg                                 vld_in            ;
 
-reg srart_calc;
-wire lock_val;
-reg start_search_max;
-reg clear;
+localparam BOUND_NUM = 32; // количесвто границ, должно быть кратно степени 2 (если рассматривать как игстограмму, то это количество столбиков). FIX: пока работает только для 32, один модуль не параметризировать
+
+// Pipeling
+always@(posedge clk) begin
+    if(!reset_n) begin
+        I_data_r   <= 0;
+        Q_data_r   <= 0;
+        vld_in     <= 0;
+    end else begin
+        I_data_r   <= I_data_i;
+        Q_data_r   <= Q_data_i;
+        vld_in     <= data_val_i;
+    end
+end
 
 // Модуль вычисления квадрата растояния
 diff_square_calc #(
     .DATA_WIDTH(DATA_WIDTH_IQ)
 )diff_square_calc_inst(
-    .clk        (clk),
-    .reset_n    (reset_n),
+    .clk        (clk       ),
+    .reset_n    (reset_n   ),
     
-    .mode_i     (mode_i),
-    .enable_i   (sqare_en),
-    .data_val_i (data_val_i),
-    .I_data_i   (I_data_i),
-    .Q_data_i   (Q_data_i),
+    .mode_i     (mode_i    ),
+    .enable_i   (sqare_en  ),
+    .data_val_i (vld_in    ),
+    .I_data_i   (I_data_r  ),
+    .Q_data_i   (Q_data_r  ),
     
     .valid_o    (suare_calc_val),
-    .sqrt_R_o   (sqrt_R)
+    .sqrt_R_o   (sqrt_R        )
 );
 
 // Модуль накпоелния статистики и вычисления номера максимума
 statistic_accum #(
     .DATA_WIDTH      (DATA_WIDTH_CORD),    // FIX: зависит от конфигурации кордика, подумать как исправить
-    .BOUND_WIDTH     (BOUND_WIDTH),
-    .BOUND_NUM       (BOUND_NUM),
+    .BOUND_WIDTH     (BOUND_WIDTH    ),
+    .BOUND_NUM       (BOUND_NUM      ),
     .BOUND_NUM_WIDTH (BOUND_NUM_WIDTH)
 )statistic_accum_inst(
-    .clk              (clk),
-    .reset_n          (reset_n),
+    .clk              (clk             ),
+    .reset_n          (reset_n         ),
     
-    .data_val_i       (suare_calc_val),
+    .data_val_i       (suare_calc_val  ),
     .start_search_max (start_search_max),
-    .clear_i          (clear),
-    .data_i           (sqrt_R),
+    .clear_i          (clear           ),
+    .data_i           (sqrt_R          ),
     
-    .data_val_o       (stat_accum_val),
-    .max_num_o        (max_num),
-    .arr_o            (accum_arr)
+    .data_val_o       (stat_accum_val  ),
+    .max_num_o        (max_num         ),
+    .arr_o            (accum_arr       )
 );
 
 
 // Модуль расчет за/против
 lock_calc #(
     .DATA_WIDTH      (DATA_WIDTH_CORD),    // FIX: зависит от конфигурации кордика, подумать как исправить
-    .BOUND_WIDTH     (BOUND_WIDTH),
-    .BOUND_NUM       (BOUND_NUM),
+    .BOUND_WIDTH     (BOUND_WIDTH    ),
+    .BOUND_NUM       (BOUND_NUM      ),
     .BOUND_NUM_WIDTH (BOUND_NUM_WIDTH)
 )lock_calc_inst(
-    .clk        (clk),
-    .reset_n    (reset_n),
+    .clk        (clk       ),
+    .reset_n    (reset_n   ),
     
-    .mode_i     (mode_i),
     .data_val_i (srart_calc),
-    .max_num_i  (max_num),
-    .data_i     (accum_arr),
+    .max_num_i  (max_num   ),
+    .data_i     (accum_arr ),
+    .max_coef_i (max_coef_i),
+    .in_coef_i  (in_coef_i ),
+    .out_coef_i (out_coef_i),
     
-    .val_o      (lock_val),
-    .lock_o     (lock_o)
+    .val_o      (lock_val  ),
+    .lock_o     (lock_o    )
 );
 
 // Счетчик периода. Считает количество обработанных точек
-
+// дикремент происходит когда cordic выдает валид
 reg[PERIOD_WIDTH-1:0] cntr;
 reg[PERIOD_WIDTH-1:0] meas_period;
 always@(posedge clk) begin
@@ -130,13 +153,12 @@ always@(*) begin
     clear            = 0;
     srart_calc       = 0;
     sqare_en         = 0;
-
     
     case(state)
         IDLE_ST: begin
             nextstate = IDLE_ST;
             clear = 1;
-            if( data_val_i ) begin
+            if( vld_in ) begin
                 if( lock_o ) meas_period = period_lock_i;
                 else         meas_period = period_seek_i;
                 
@@ -170,8 +192,4 @@ always@(*) begin
         end
     endcase
 end
-
-
-
-
 endmodule
